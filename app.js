@@ -1,7 +1,12 @@
 var querystring = require('./lib/querystring');
+var Boundary = require('./lib/boundary');
 const net = require('net');
 
 var request = function(opts){
+
+
+    var obj = new Object();
+
 
     var url = opts.url;
     var qs = opts.qs;
@@ -26,7 +31,6 @@ var request = function(opts){
 
     var client = net.connect( {host: host , port: port || 80}, () => {
 
-        console.log('connect');
         var head = '';
         var body = '';
         var qsParams = '';
@@ -36,63 +40,88 @@ var request = function(opts){
         }
 
         head += opts.method + ' ' + path + '?' + qsParams + ' HTTP/1.1\r\n';
+        var boundary = Boundary();
+        head += 'Content-Type: multipart/form-data; boundary=' + boundary +'\r\n';
 
         for (var key in headers ){
             head += key +': ' + headers[key] + '\r\n';
         }
-
-
+        
         if(form){
-            head += 'Content-Length: ' + ( JSON.stringify(form).length + 1)+'\r\n';
-            body +=  JSON.stringify(form);
+            for(var key in form){
+                body += '--' + boundary + '\r\n';
+                body += 'Content-Disposition: form-data; name="'+ key +'"\r\n';
+                body += '\r\n';
+                body += form[key] + '\r\n';
+
+            }
+            body += '--' + boundary + '--\r\n';;
+
+            head += 'Content-Length: ' + ( body.length)+'\r\n';
         }
 
         head += '\r\n';
-        body += '\n';
 
         client.write(head + body);
     });
 
-    client.on('data', (data) => {
+    obj.client  = client;
 
-        var headerIndex = 0;
-        for(var i = 0 ; i < data.length ; i++){
+    obj.then = function(func){
+        obj.client.on('data', (data) => {
 
-            if (data[i] == 0x0d && data[i +1 ]== 0x0a && data[i + 2] == 0x0d && data[i + 3 ]== 0x0a   ){
-                headerIndex = i;
-                break;
+            var headerIndex = 0;
+            for(var i = 0 ; i < data.length ; i++){
+
+                if (data[i] == 0x0d && data[i +1 ]== 0x0a && data[i + 2] == 0x0d && data[i + 3 ]== 0x0a   ){
+                    headerIndex = i;
+                    break;
+                }
             }
-        }
 
-        var headerBuf = new Buffer(headerIndex);
-        data.copy(headerBuf, 0, 0, headerIndex);
-        var headersArray = headerBuf.toString().split('\r\n');
-        var headerObject = new Object(),
-            statusCode;
+            var headerBuf = new Buffer(headerIndex);
+            data.copy(headerBuf, 0, 0, headerIndex);
+            var headersArray = headerBuf.toString().split('\r\n');
+            var headerObject = new Object(),
+                statusCode;
 
-        for(var i = 0; i < headersArray.length ; i++){
-            if (i == 0){
-                statusCode = headersArray[i].split(' ')[1];
-            } else {
-                var headerParams =  headersArray[i].split(': ');
-                headerObject[headerParams[0]] = headerParams[1];
+            for(var i = 0; i < headersArray.length ; i++){
+                if (i == 0){
+                    statusCode = headersArray[i].split(' ')[1];
+                } else {
+                    var headerParams =  headersArray[i].split(': ');
+                    headerObject[headerParams[0]] = headerParams[1];
+                }
             }
-        }
 
-        var bodyBuf = new Buffer(parseInt(headerObject['Content-Length']));
+            var bodyBuf = new Buffer(parseInt(headerObject['Content-Length']));
 
-        data.copy(bodyBuf, 0, headerIndex + 4, data.length);
+            data.copy(bodyBuf, 0, headerIndex + 4, data.length);
 
-        console.log(statusCode);
-        console.log(headerObject);
-        console.log(bodyBuf);
+            var ret = {
+                statusCode : statusCode,
+                headerObject : headerObject,
+                bodyBuf : bodyBuf,
+            };
+            client.end();
+            func(ret);
 
-        client.end();
-    });
+        });
+        return this;
+    };
 
-    client.on('error', function(err){
-        console.log('err : ', err);
-    })
+    obj.catch = function(func){
+        client.on('error', function(err){
+            func(err);
+        })
+        return this;
+    };
+
+
+
+
+    return obj;
+
 };
 
 //var url = 'http://tool.oschina.net';
@@ -106,6 +135,7 @@ request({
         a: 'a'
     },
     headers : {
-        "Content-Type" : 'application/json'
     }
+}).then(function(ret){
+    console.log(ret);
 });
