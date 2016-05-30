@@ -36,7 +36,7 @@ var request = function(opts){
         var qsParams = '';
 
         if (qs){
-           qsParams = querystring.stringify(qs);
+            qsParams = querystring.stringify(qs);
         }
 
         head += opts.method + ' ' + path + '?' + qsParams + ' HTTP/1.1\r\n';
@@ -46,7 +46,7 @@ var request = function(opts){
         for (var key in headers ){
             head += key +': ' + headers[key] + '\r\n';
         }
-        
+
         if(form){
             for(var key in form){
                 body += '--' + boundary + '\r\n';
@@ -55,14 +55,24 @@ var request = function(opts){
                 body += form[key] + '\r\n';
 
             }
-            body += '--' + boundary + '--\r\n';;
-
-            head += 'Content-Length: ' + ( body.length)+'\r\n';
+            body += '--' + boundary + '--\r\n';
         }
+        var body_buffer = new Buffer(body, 'utf-8');
+        console.log( body_buffer.length , body_buffer);
 
+        head += 'Content-Length: ' + body_buffer.length +'\r\n';
         head += '\r\n';
 
-        client.write(head + body);
+
+
+        var head_buffer = new Buffer(head, 'utf-8');
+        console.log(head_buffer.length);
+        console.log(Buffer.concat([head_buffer,body_buffer]).length);
+
+        //head_buffer.concat(body_buffer);
+
+        client.write(Buffer.concat([head_buffer,body_buffer]));
+        //client.write(body_buffer);
     });
 
     obj.client  = client;
@@ -101,7 +111,7 @@ var request = function(opts){
             var ret = {
                 statusCode : statusCode,
                 headerObject : headerObject,
-                bodyBuf : bodyBuf,
+                bodyBuf : bodyBuf
             };
             client.end();
             func(ret);
@@ -117,9 +127,6 @@ var request = function(opts){
         return this;
     };
 
-
-
-
     return obj;
 
 };
@@ -128,11 +135,12 @@ var request = function(opts){
 
 request({
 
-    url: 'http://127.0.0.1:3001/common/token',
+    url: 'http://127.0.0.1:3000/upload',
     method: 'GET',
     qs : {abc : 'abc'},
     form : {
-        a: 'a'
+        a: 'a',
+        b: '中文测试啊啊啊'
     },
     headers : {
     }
